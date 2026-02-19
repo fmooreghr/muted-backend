@@ -29,8 +29,8 @@ retrying==1.4.2
 starlette==0.52.1
 submitit==1.5.4
 sympy==1.14.0
-torch==2.0.1
-torchaudio==2.0.2
+torch==2.1.0
+torchaudio==2.1.0
 tqdm==4.67.3
 treetable==0.2.6
 typing-inspection==0.4.2
