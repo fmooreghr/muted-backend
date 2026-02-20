@@ -13,6 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.post("/process")
 async def process_audio(file: UploadFile = File(...)):
     file_bytes = await file.read()
@@ -27,29 +28,37 @@ async def process_audio(file: UploadFile = File(...)):
             progress_value = {"pct": 0}
             demucs_done = {"done": False}
 
-            # Pipe to capture demucs progress from stderr
             r, w = os.pipe()
             original_stderr = sys.stderr
-            sys.stderr = os.fdopen(w, 'w')
+            sys.stderr = os.fdopen(w, "w")
 
             def run_demucs():
                 try:
-                    demucs.separate.main(["--mp3", "-o", tmpdir, "--overlap", "0.1", "--mp3-bitrate", "128", input_path])
+                    demucs.separate.main([
+                        "--mp3",
+                        "-o", tmpdir,
+                        "-n", "htdemucs",      # default hybrid transformer model
+                        "--shifts", "0",        # biggest speedup, minimal quality loss
+                        "--overlap", "0.15",    # slightly below default (0.25), good tradeoff
+                        "--segment", "25",      # smaller than default (~39) but not extreme
+                        "--mp3-bitrate", "128", # keep decent bitrate
+                        input_path,
+                    ])
                 finally:
                     demucs_done["done"] = True
                     try:
                         sys.stderr.close()
-                    except:
+                    except Exception:
                         pass
 
             def read_progress():
-                with os.fdopen(r, 'r') as pipe:
+                with os.fdopen(r, "r") as pipe:
                     for line in pipe:
-                        if '%' in line:
+                        if "%" in line:
                             try:
-                                pct = float(line.strip().split('%')[0].split()[-1])
+                                pct = float(line.strip().split("%")[0].split()[-1])
                                 progress_value["pct"] = pct
-                            except:
+                            except Exception:
                                 pass
 
             t_demucs = threading.Thread(target=run_demucs)
