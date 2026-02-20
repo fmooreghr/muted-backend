@@ -2,7 +2,8 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import demucs.separate
-import tempfile, os, base64, json, sys, threading, time
+import tempfile, os, base64, json, sys
+from io import StringIO
 
 app = FastAPI()
 
@@ -12,7 +13,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 @app.post("/process")
 async def process_audio(file: UploadFile = File(...)):
@@ -25,39 +25,26 @@ async def process_audio(file: UploadFile = File(...)):
             with open(input_path, "wb") as f:
                 f.write(file_bytes)
 
-            progress_value = {"pct": 0}
-            demucs_done = {"done": False}
+            # Capture demucs stderr for progress
+            import threading
 
-            r, w = os.pipe()
+            progress_value = {"pct": 0}
+
             original_stderr = sys.stderr
-            sys.stderr = os.fdopen(w, "w")
+            r, w = os.pipe()
+            sys.stderr = os.fdopen(w, 'w')
 
             def run_demucs():
-                try:
-                    demucs.separate.main([
-                        "--mp3",
-                        "-o", tmpdir,
-                        "-n", "htdemucs",      # default hybrid transformer model
-                        "--shifts", "0",        # biggest speedup, minimal quality loss
-                        "--overlap", "0.15",    # slightly below default (0.25), good tradeoff
-                        "--mp3-bitrate", "128", # keep decent bitrate
-                        input_path,
-                    ])
-                finally:
-                    demucs_done["done"] = True
-                    try:
-                        sys.stderr.close()
-                    except Exception:
-                        pass
+                demucs.separate.main(["--mp3", "-o", tmpdir, input_path])
 
             def read_progress():
-                with os.fdopen(r, "r") as pipe:
+                with os.fdopen(r, 'r') as pipe:
                     for line in pipe:
-                        if "%" in line:
+                        if '%' in line:
                             try:
-                                pct = float(line.strip().split("%")[0].split()[-1])
+                                pct = float(line.strip().split('%')[0].split()[-1])
                                 progress_value["pct"] = pct
-                            except Exception:
+                            except:
                                 pass
 
             t_demucs = threading.Thread(target=run_demucs)
@@ -65,12 +52,11 @@ async def process_audio(file: UploadFile = File(...)):
             t_progress.start()
             t_demucs.start()
 
-            while not demucs_done["done"]:
-                yield f"data: {json.dumps({'type': 'progress', 'value': round(progress_value['pct'])})}\n\n"
-                time.sleep(1)
+            while t_demucs.is_alive():
+                yield f"data: {json.dumps({'type': 'progress', 'value': progress_value['pct']})}\n\n"
+                import time; time.sleep(1)
 
             t_demucs.join()
-            t_progress.join()
             sys.stderr = original_stderr
 
             out_dir = None
