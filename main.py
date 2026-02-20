@@ -40,7 +40,6 @@ async def process_audio(file: UploadFile = File(...)):
                         "-n", "htdemucs",      # default hybrid transformer model
                         "--shifts", "0",        # biggest speedup, minimal quality loss
                         "--overlap", "0.15",    # slightly below default (0.25), good tradeoff
-                        "--segment", "25",      # smaller than default (~39) but not extreme
                         "--mp3-bitrate", "128", # keep decent bitrate
                         input_path,
                     ])
