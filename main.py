@@ -35,7 +35,7 @@ async def process_audio(file: UploadFile = File(...)):
             sys.stderr = os.fdopen(w, 'w')
 
             def run_demucs():
-                demucs.separate.main(["--mp3", "-o", tmpdir, input_path])
+                demucs.separate.main(["--mp3", "-o", tmpdir, "--overlap", "0.1", "--mp3-bitrate", "128", input_path])
 
             def read_progress():
                 with os.fdopen(r, 'r') as pipe:
